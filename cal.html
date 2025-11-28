@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>프리미엄 결제 계산기 (오리지널 UI 유지)</title>
+    <style>
+        /* 1. 디자인 (CSS) - 오리지널 4x5 UI 스타일 복구 */
+        body {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f2f5; /* 밝은 배경 유지 */
+            font-family: 'Arial', sans-serif;
+        }
+
+        .calculator {
+            background-color: #333; /* 다크 테마 배경 */
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            width: 300px;
+        }
+
+        .display-wrapper { 
+            position: relative; 
+            margin-bottom: 20px; 
+        }
+
+        #display {
+            width: 100%;
+            height: 60px;
+            background-color: #eee;
+            border: none;
+            border-radius: 10px;
+            text-align: right;
+            padding: 10px;
+            font-size: 2rem;
+            box-sizing: border-box;
+            color: #333;
+        }
+
+        /* 프리미엄 배지 */
+        #premiumBadge {
+            position: absolute;
+            top: 5px;
+            left: 10px;
+            background-color: gold;
+            color: #333;
+            padding: 2px 6px;
+            border-radius: 5px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            display: none;
+        }
+
+        /* 버튼 그리드 (4x5 레이아웃 복구) */
+        .buttons {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+        button {
+            height: 60px;
+            border: none;
+            border-radius: 10px; /* 사각 둥근 모양 */
+            font-size: 1.2rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        button:active { transform: scale(0.95); }
+        .btn-number { background-color: #666; color: white; }
+        .btn-operator { background-color: #ff9f43; color: white; }
+        .btn-clear { background-color: #ee5253; color: white; }
+        .btn-equal { background-color: #2e86de; color: white; grid-column: span 2; }
+
+
+        /* 팝업 스타일 (최종 버전 유지) */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); z-index: 1000; justify-content: center; align-items: center; }
+        #confirmationModal { z-index: 2000; }
+        #processingModal { z-index: 3000; }
+        .modal-content { background: white; padding: 30px; border-radius: 15px; text-align: center; width: 300px; box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5); }
+        .processing-box { background: white; padding: 50px; border-radius: 15px; text-align: center; box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5); }
+        .price-option {
+            border: 2px solid #ddd; padding: 15px; margin: 15px 0; border-radius: 10px; cursor: pointer; transition: border-color 0.2s, background 0.2s; display: flex; justify-content: space-between; align-items: flex-start;
+        }
+        .price-option:hover { background: #f0f8ff; }
+        .price-option.selected { border-color: #ff9f43; background-color: #fff8e1; box-shadow: 0 0 5px rgba(255, 159, 67, 0.5); }
+        .option-details { text-align: left; line-height: 1.5; }
+        .option-price { color: #ff9f43; font-weight: bold; font-size: 1.2rem; margin-top: 5px; }
+        #payButton { width: 100%; height: 50px; background-color: #ddd; color: #333; margin-top: 25px; font-size: 1.2rem; border-radius: 8px; font-weight: bold; }
+        #payButton:not(:disabled) { background-color: #2e86de; color: white; }
+        #payButton:disabled { background-color: #ddd; color: #666; cursor: not-allowed; }
+        #laterButton { width: auto; height: 35px; padding: 0 15px; font-size: 1rem; font-weight: normal; background-color: transparent; color: #777; border: none; margin-top: 10px; border-radius: 8px; display: block; margin-left: auto; margin-right: auto; }
+        /* 로딩 애니메이션 및 기타 스타일 유지 */
+        .spinner { border: 5px solid #f3f3f3; border-top: 5px solid #2e86de; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin: 0 auto 15px auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .success-icon { font-size: 60px; color: green; line-height: 1; display: none; margin: 0 auto 15px auto; }
+        .pay-confirm-btn { background-color: #2e86de; color: white; height: 45px; width: 45%; margin: 10px 5px; font-size: 1rem; }
+        .pay-cancel-btn { background-color: #eee; color: #333; height: 45px; width: 45%; margin: 10px 5px; font-size: 1rem; }
+    </style>
+</head>
+<body>
+
+    <div class="calculator">
+        <div class="display-wrapper">
+            <input type="text" id="display" readonly value="0">
+            <span id="premiumBadge">★ PREMIUM</span>
+        </div>
+        <div class="buttons">
+            <button class="btn-clear" onclick="clearDisplay()">C</button>
+            <button class="btn-operator" onclick="appendOperator('/')">/</button>
+            <button class="btn-operator" onclick="appendOperator('*')">×</button>
+            <button class="btn-operator" onclick="appendOperator('-')">-</button>
+            
+            <button class="btn-number" onclick="appendNumber('7')">7</button>
+            <button class="btn-number" onclick="appendNumber('8')">8</button>
+            <button class="btn-number" onclick="appendNumber('9')">9</button>
+            <button class="btn-operator" onclick="appendOperator('+')">+</button>
+            
+            <button class="btn-number" onclick="appendNumber('4')">4</button>
+            <button class="btn-number" onclick="appendNumber('5')">5</button>
+            <button class="btn-number" onclick="appendNumber('6')">6</button>
+            <button class="btn-number" onclick="appendNumber('.')">.</button>
+
+            <button class="btn-number" onclick="appendNumber('1')">1</button>
+            <button class="btn-number" onclick="appendNumber('2')">2</button>
+            <button class="btn-number" onclick="appendNumber('3')">3</button>
+            <button class="btn-number" onclick="appendNumber('0')">0</button>
+            
+            <button class="btn-equal" onclick="calculateResult()">=</button>
+        </div>
+    </div>
+    
+    <div id="subscriptionModal" class="modal-overlay">
+        <div class="modal-content">
+            <h3>🔒 프리미엄 계산기 구독</h3>
+            <p>이 계산기를 계속 사용하려면 플랜을 선택해주세요.</p>
+            
+            <div class="price-option" id="plan-1" onclick="selectPlan(1)">
+                <div class="option-details">
+                    1개월 구독 (월간 결제) <br>
+                    **정가:** 9,900원 / 월
+                </div>
+                <strong class="option-price" id="price1Month">9,900원</strong>
+            </div>
+            
+            <div class="price-option" id="plan-12" onclick="selectPlan(12)">
+                <div class="option-details">
+                    12개월 구독 (연간 결제) <br>
+                    **10% 할인 혜택!**
+                </div>
+                <strong class="option-price" id="price12Month">106,920원</strong>
+            </div>
+
+            <p style="font-size: 0.8rem; color: #555;">(12개월 구독은 월 약 8,910원 꼴)</p>
+            
+            <button id="payButton" onclick="attemptPayment()" disabled>결제하기</button> 
+            <button id="laterButton" onclick="closeModal(subscriptionModal)">나중에 하기</button>
+        </div>
+    </div>
+    
+    <div id="confirmationModal" class="modal-overlay">
+        <div class="modal-content" style="width: 280px;">
+            <h4>결제 진행 확인</h4>
+            <p id="confirmMessageText" style="font-size: 1.1rem; font-weight: bold;"></p> 
+            <p style="font-size: 0.9rem; color: #cc3300;">(경고: 브라우저 쿠키 데이터를 이용해 결제를 시도합니다)</p>
+            
+            <button class="pay-confirm-btn" onclick="processPayment(true)">결제 진행</button>
+            <button class="pay-cancel-btn" onclick="processPayment(false)">취소</button>
+        </div>
+    </div>
+    
+    <div id="processingModal" class="modal-overlay">
+        <div class="processing-box">
+            <div id="spinner" class="spinner"></div>
+            <div id="successIcon" class="success-icon">✓</div>
+            <p id="processingText">결제를 처리하는 중입니다...</p>
+        </div>
+    </div>
+
+
+    <script>
+        // 3. 기능 (JavaScript) - 단순 문자열 계산 로직 복구
+        const display = document.getElementById('display');
+        const subscriptionModal = document.getElementById('subscriptionModal');
+        const confirmationModal = document.getElementById('confirmationModal');
+        const processingModal = document.getElementById('processingModal'); 
+        const payButton = document.getElementById('payButton');
+        const confirmMessageText = document.getElementById('confirmMessageText');
+        const spinner = document.getElementById('spinner');
+        const successIcon = document.getElementById('successIcon');
+        const processingText = document.getElementById('processingText');
+        const premiumBadge = document.getElementById('premiumBadge'); 
+
+        let currentExpression = ''; // 현재 입력된 수식 저장
+        let selectedPlanId = null; 
+        
+        // 연간 구독 가격 계산 및 업데이트
+        const monthlyPrice = 9900;
+        const annualPrice = monthlyPrice * 12;
+        const annualDiscount = annualPrice * 0.10;
+        const finalAnnualPrice = annualPrice - annualDiscount;
+        document.getElementById('price12Month').innerText = finalAnnualPrice.toLocaleString() + '원';
+        
+        // --- 상태 관리 함수 ---
+        function checkPremiumStatus() {
+            if (sessionStorage.getItem('isPremiumActive') === 'true') {
+                premiumBadge.style.display = 'inline-block';
+            } else {
+                premiumBadge.style.display = 'none';
+            }
+        }
+        
+        // --- 계산기 동작 함수 (eval 기반으로 복구) ---
+        
+        // 숫자 및 . 입력
+        function appendNumber(value) {
+            currentExpression = display.value === '0' ? value : display.value + value;
+            display.value = currentExpression;
+        }
+
+        // 연산자 입력
+        function appendOperator(operator) {
+            // 디스플레이가 비어있지 않고, 마지막 문자가 연산자가 아닐 때만 추가
+            const lastChar = display.value.slice(-1);
+            if (display.value !== '' && !['/', '*', '+', '-'].includes(lastChar)) {
+                currentExpression = display.value + operator;
+                display.value = currentExpression;
+            }
+        }
+
+        // 초기화 (C 버튼)
+        function clearDisplay() {
+            display.value = '0';
+            currentExpression = '';
+            selectedPlanId = null;
+        }
+
+        // --- 팝업 및 결제 로직 (유지) ---
+        function closeModal(modalElement) {
+            modalElement.style.display = 'none';
+        }
+
+        // = 버튼을 누르면 호출
+        function calculateResult() {
+            if (display.value === '' || display.value === '0') return;
+            currentExpression = display.value; 
+            
+            // 프리미엄 상태 확인: 활성화되어 있으면 바로 계산 실행
+            if (sessionStorage.getItem('isPremiumActive') === 'true') {
+                executeCalculation(); 
+                return;
+            }
+            
+            // 프리미엄이 아니면 구독 팝업 띄우기
+            subscriptionModal.style.display = 'flex';
+            selectedPlanId = null; 
+            payButton.disabled = true; 
+            document.querySelectorAll('.price-option').forEach(el => el.classList.remove('selected'));
+        }
+        
+        function selectPlan(planId) {
+            document.querySelectorAll('.price-option').forEach(el => el.classList.remove('selected'));
+            document.getElementById('plan-' + planId).classList.add('selected');
+            selectedPlanId = planId;
+            payButton.disabled = false;
+        }
+
+        function attemptPayment() {
+            if (selectedPlanId === null) return; 
+            closeModal(subscriptionModal);
+            showConfirmationModal();
+        }
+        
+        function showConfirmationModal() {
+            const selectedPlanText = selectedPlanId === 1 ? '1개월 플랜' : '12개월 플랜';
+            confirmMessageText.innerText = `${selectedPlanText}으로 결제 하시겠습니까?`;
+            confirmationModal.style.display = 'flex';
+        }
+
+        function processPayment(isConfirmed) {
+            closeModal(confirmationModal); 
+            
+            if (isConfirmed) {
+                showProcessingAnimation();
+            } else {
+                alert("결제가 취소되었습니다. 다시 구독해주세요.");
+            }
+        }
+        
+        function showProcessingAnimation() {
+            processingText.innerText = '결제를 처리하는 중입니다...';
+            spinner.style.display = 'block';
+            successIcon.style.display = 'none';
+            processingModal.style.display = 'flex';
+
+            setTimeout(() => {
+                spinner.style.display = 'none';
+                successIcon.style.display = 'block';
+                processingText.innerText = '결제 완료! 프리미엄 기능이 활성화됩니다.';
+
+                sessionStorage.setItem('isPremiumActive', 'true');
+                checkPremiumStatus(); 
+
+                setTimeout(() => {
+                    closeModal(processingModal);
+                    executeCalculation(); 
+                }, 800); 
+                
+            }, 2000); 
+        }
+        
+        // 최종 계산 로직 (eval 기반으로 복구)
+        function executeCalculation() {
+            if (currentExpression === '') return;
+            try {
+                // 저장된 수식을 계산하고 +1을 더함
+                let trueResult = eval(currentExpression);
+                let misleadingResult = trueResult + 1;
+
+                display.value = String(misleadingResult);
+                currentExpression = String(misleadingResult); // 계산 결과 저장
+                selectedPlanId = null; 
+            } catch (error) {
+                display.value = 'Error';
+                setTimeout(clearDisplay, 1000);
+            }
+        }
+        
+        checkPremiumStatus();
+    </script>
+</body>
+</html>
